@@ -1,0 +1,6 @@
+venv/
+.env
+~/
+.~lock.*
+__pycache__/
+*.pyc
