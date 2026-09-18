@@ -1,0 +1,57 @@
+"""Inventory endpoints: stock adjustments and kardex."""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlmodel import Session, select
+
+from app.api.deps import get_session
+from app.models.product import Product
+from app.models.stock_movement import MovementReason, StockMovement
+
+router = APIRouter(prefix="/inventory", tags=["inventory"])
+
+
+class StockAdjust(BaseModel):
+    """Stock adjustment payload."""
+
+    product_id: int = Field(gt=0)
+    quantity_change: int = Field(description="+in / -out, 0 not allowed")
+    reason: MovementReason = MovementReason.ADJUST
+
+
+@router.post("/adjust", response_model=StockMovement, status_code=status.HTTP_201_CREATED)
+def adjust_stock(payload: StockAdjust, session: Session = Depends(get_session)) -> StockMovement:
+    """Adjust stock and record a kardex movement atomically."""
+    if payload.quantity_change == 0:
+        raise HTTPException(status_code=400, detail="quantity_change cannot be 0")
+    product = session.exec(
+        select(Product).where(Product.id == payload.product_id).with_for_update()
+    ).one_or_none()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    new_stock = product.stock + payload.quantity_change
+    if new_stock < 0:
+        raise HTTPException(status_code=400, detail="Insufficient stock")
+    product.stock = new_stock
+    session.add(product)
+    movement = StockMovement(
+        product_id=product.id,
+        quantity_change=payload.quantity_change,
+        quantity_after=new_stock,
+        reason=payload.reason,
+    )
+    session.add(movement)
+    session.flush()
+    session.refresh(movement)
+    return movement
+
+
+@router.get("/movements", response_model=list[StockMovement])
+def list_movements(
+    product_id: int | None = None, session: Session = Depends(get_session)
+) -> list[StockMovement]:
+    """List kardex movements, optionally filtered by product."""
+    statement = select(StockMovement).order_by(StockMovement.id.desc())
+    if product_id is not None:
+        statement = statement.where(StockMovement.product_id == product_id)
+    return list(session.exec(statement).all())
