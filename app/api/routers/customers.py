@@ -1,6 +1,6 @@
 """Customer endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
 from app.api.deps import get_session
@@ -25,9 +25,20 @@ def create_customer(payload: Customer, session: Session = Depends(get_session)) 
 
 
 @router.get("", response_model=list[Customer])
-def list_customers(session: Session = Depends(get_session)) -> list[Customer]:
-    """List all customers."""
-    return list(session.exec(select(Customer).order_by(Customer.email)).all())
+def list_customers(
+    session: Session = Depends(get_session),
+    q: str | None = Query(default=None, description="Filter by email or name substring"),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[Customer]:
+    """List customers with search and pagination."""
+    statement = select(Customer).order_by(Customer.email)
+    if q:
+        statement = statement.where(
+            (Customer.email.contains(q)) | (Customer.full_name.contains(q))
+        )
+    statement = statement.offset(skip).limit(limit)
+    return list(session.exec(statement).all())
 
 
 @router.get("/{customer_id}", response_model=Customer)

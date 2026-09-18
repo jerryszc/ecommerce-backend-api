@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.core.datetime import utcnow
+
 if TYPE_CHECKING:
     from app.models.order import Order
 
@@ -18,6 +20,6 @@ class Customer(SQLModel, table=True):
     email: str = Field(unique=True, index=True, max_length=255)
     full_name: str = Field(max_length=150)
     address: str | None = Field(default=None, max_length=255)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
 
     orders: list["Order"] = Relationship(back_populates="customer")

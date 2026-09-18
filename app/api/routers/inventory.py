@@ -1,6 +1,6 @@
 """Inventory endpoints: stock adjustments and kardex."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
@@ -48,10 +48,17 @@ def adjust_stock(payload: StockAdjust, session: Session = Depends(get_session)) 
 
 @router.get("/movements", response_model=list[StockMovement])
 def list_movements(
-    product_id: int | None = None, session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    product_id: int | None = Query(default=None, gt=0),
+    reason: MovementReason | None = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
 ) -> list[StockMovement]:
-    """List kardex movements, optionally filtered by product."""
+    """List kardex movements newest first with filters and pagination."""
     statement = select(StockMovement).order_by(StockMovement.id.desc())
     if product_id is not None:
         statement = statement.where(StockMovement.product_id == product_id)
+    if reason is not None:
+        statement = statement.where(StockMovement.reason == reason)
+    statement = statement.offset(skip).limit(limit)
     return list(session.exec(statement).all())

@@ -1,11 +1,11 @@
 """Order endpoints with atomic stock handling."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.api.deps import get_session
-from app.models.order import Order
+from app.models.order import Order, OrderStatus
 from app.services.order_service import create_order
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -42,9 +42,21 @@ def place_order(payload: OrderCreate, session: Session = Depends(get_session)) -
 
 
 @router.get("", response_model=list[Order])
-def list_orders(session: Session = Depends(get_session)) -> list[Order]:
-    """List all orders newest first."""
-    return list(session.exec(select(Order).order_by(Order.id.desc())).all())
+def list_orders(
+    session: Session = Depends(get_session),
+    customer_id: int | None = Query(default=None, gt=0),
+    status: OrderStatus | None = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[Order]:
+    """List orders newest first with filters and pagination."""
+    statement = select(Order).order_by(Order.id.desc())
+    if customer_id is not None:
+        statement = statement.where(Order.customer_id == customer_id)
+    if status is not None:
+        statement = statement.where(Order.status == status)
+    statement = statement.offset(skip).limit(limit)
+    return list(session.exec(statement).all())
 
 
 @router.get("/{order_id}", response_model=Order)

@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 from sqlmodel import Column, Field, Relationship, SQLModel
 from sqlalchemy import Enum as SAEnum
 
+from app.core.datetime import utcnow
+
 if TYPE_CHECKING:
     from app.models.customer import Customer
     from app.models.order_item import OrderItem
@@ -41,8 +43,8 @@ class Order(SQLModel, table=True):
         ),
     )
     total: Decimal = Field(default=Decimal("0.00"), max_digits=12, decimal_places=2)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
+    updated_at: datetime = Field(default_factory=utcnow, nullable=False)
 
     customer: "Customer" = Relationship(back_populates="orders")
     items: list["OrderItem"] = Relationship(

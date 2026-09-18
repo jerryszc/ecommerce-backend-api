@@ -1,16 +1,18 @@
 """Product endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
 from app.api.deps import get_session
-from app.models.product import Product
+from app.models.product import Product, ProductCreate
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 
 @router.post("", response_model=Product, status_code=status.HTTP_201_CREATED)
-def create_product(payload: Product, session: Session = Depends(get_session)) -> Product:
+def create_product(payload: ProductCreate, session: Session = Depends(get_session)) -> Product:
     """Create a product. SKU must be unique."""
     exists = session.exec(select(Product).where(Product.sku == payload.sku)).first()
     if exists:
@@ -31,9 +33,32 @@ def create_product(payload: Product, session: Session = Depends(get_session)) ->
 
 
 @router.get("", response_model=list[Product])
-def list_products(session: Session = Depends(get_session)) -> list[Product]:
-    """List all products."""
-    return list(session.exec(select(Product).order_by(Product.name)).all())
+def list_products(
+    session: Session = Depends(get_session),
+    q: str | None = Query(default=None, description="Filter by sku or name substring"),
+    category_id: int | None = Query(default=None, gt=0),
+    is_active: bool | None = Query(default=None),
+    min_price: Decimal | None = Query(default=None, ge=0),
+    max_price: Decimal | None = Query(default=None, ge=0),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[Product]:
+    """List products with search, filters and pagination."""
+    statement = select(Product).order_by(Product.name)
+    if q:
+        statement = statement.where(
+            (Product.sku.contains(q)) | (Product.name.contains(q))
+        )
+    if category_id is not None:
+        statement = statement.where(Product.category_id == category_id)
+    if is_active is not None:
+        statement = statement.where(Product.is_active == is_active)
+    if min_price is not None:
+        statement = statement.where(Product.price >= min_price)
+    if max_price is not None:
+        statement = statement.where(Product.price <= max_price)
+    statement = statement.offset(skip).limit(limit)
+    return list(session.exec(statement).all())
 
 
 @router.get("/{product_id}", response_model=Product)

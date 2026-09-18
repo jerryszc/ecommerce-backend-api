@@ -1,6 +1,27 @@
+# Entornos virtuales
 venv/
+.venv/
+
+# Credenciales locales
 .env
-~/
-.~lock.*
+
+# Caches Python y Pytest
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Bases de datos locales
+*.db
+*.sqlite
+*.sqlite3
+
+# Editores / OS
+~/
+.~lock.*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

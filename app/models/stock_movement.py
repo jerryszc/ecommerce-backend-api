@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Optional
 from sqlmodel import Column, Field, Relationship, SQLModel
 from sqlalchemy import Enum as SAEnum
 
+from app.core.datetime import utcnow
+
 if TYPE_CHECKING:
     from app.models.product import Product
 
@@ -42,6 +44,6 @@ class StockMovement(SQLModel, table=True):
         ),
     )
     order_id: int | None = Field(default=None, foreign_key="order_.id")
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
 
     product: Optional["Product"] = Relationship(back_populates="movements")
