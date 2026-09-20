@@ -23,7 +23,7 @@ class ProductBase(SQLModel):
     price: Decimal = Field(max_digits=10, decimal_places=2, ge=0)
     stock: int = Field(default=0, ge=0)
     is_active: bool = Field(default=True)
-    category_id: int | None = Field(default=None, foreign_key="category.id")
+    category_id: int | None = Field(default=None, foreign_key="category.id", index=True)
 
 
 class Product(ProductBase, table=True):

@@ -30,7 +30,7 @@ def list_categories(
     limit: int = Query(default=50, ge=1, le=100),
 ) -> list[Category]:
     """List categories with search and pagination."""
-    statement = select(Category).order_by(Category.name)
+    statement = select(Category).order_by(Category.id)
     if q:
         statement = statement.where(Category.name.contains(q))
     statement = statement.offset(skip).limit(limit)
