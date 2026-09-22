@@ -25,3 +25,7 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Configuración de herramientas IA / locales
+opencode.json
+harness.md
