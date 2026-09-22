@@ -1,11 +1,11 @@
 """StockMovement model: inventory kardex / audit trail."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Optional
 
-from sqlmodel import Column, Field, Relationship, SQLModel
 from sqlalchemy import Enum as SAEnum
+from sqlmodel import Column, Field, Relationship, SQLModel
 
 from app.core.datetime import utcnow
 
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from app.models.product import Product
 
 
-class MovementReason(str, Enum):
+class MovementReason(StrEnum):
     """Reason for a stock change."""
 
     IN = "IN"

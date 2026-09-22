@@ -2,11 +2,11 @@
 
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlmodel import Column, Field, Relationship, SQLModel
 from sqlalchemy import Enum as SAEnum
+from sqlmodel import Column, Field, Relationship, SQLModel
 
 from app.core.datetime import utcnow
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from app.models.order_item import OrderItem
 
 
-class OrderStatus(str, Enum):
+class OrderStatus(StrEnum):
     """Order lifecycle states."""
 
     PENDING = "pending"

@@ -4,8 +4,8 @@ from decimal import Decimal
 
 from sqlmodel import Session, select
 
-from app.core.database import engine
 import app.models  # noqa: F401  (register metadata)
+from app.core.database import engine
 from app.models.category import Category
 from app.models.customer import Customer
 from app.models.product import Product
@@ -67,9 +67,7 @@ def get_or_create_product(
     """Get product by SKU or create it with an IN kardex entry."""
     product = session.exec(select(Product).where(Product.sku == sku)).first()
     if product is None:
-        product = Product(
-            sku=sku, name=name, price=price, stock=stock, category_id=category_id
-        )
+        product = Product(sku=sku, name=name, price=price, stock=stock, category_id=category_id)
         session.add(product)
         session.flush()
         session.refresh(product)
@@ -113,7 +111,6 @@ def run_seed() -> None:
             )
         get_or_create_customer(session, "demo@tienda.com", "Cliente Demo")
         session.commit()
-    print("Seed ok: 3 categorias, 4 productos, 1 cliente demo.")
 
 
 if __name__ == "__main__":
