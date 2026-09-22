@@ -29,3 +29,13 @@ Thumbs.db
 # Configuración de herramientas IA / locales
 opencode.json
 harness.md
+agents.md
+qa-agent.md
+.opencode/
+
+# --- Docker ---
+pgdata/
+redisdata/
+
+# --- Python extras ---
+*.egg-info/
