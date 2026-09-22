@@ -1,3 +1,8 @@
+![CI](https://github.com/jerryszc/ecommerce-backend-api/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![Docker](https://img.shields.io/badge/docker-ready-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 # E-Commerce Inventory & Order Backend
 
 > **Executive Summary:** Transactional backend designed to eliminate consistency loss in concurrent inventories and guarantee atomicity in e-commerce order processing.
