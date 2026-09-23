@@ -29,7 +29,7 @@ class ProductBase(SQLModel):
 class Product(ProductBase, table=True):
     """Sellable item. Stock is the cached current quantity."""
 
-    __tablename__ = "product"  # type: ignore[assignment]
+    __tablename__ = "product"
 
     id: int | None = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=utcnow, nullable=False)

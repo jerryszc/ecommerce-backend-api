@@ -1,5 +1,7 @@
 """Order endpoints with atomic stock handling."""
 
+from typing import Any, cast
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
@@ -50,7 +52,9 @@ def list_orders(
     limit: int = Query(default=50, ge=1, le=100),
 ) -> list[Order]:
     """List orders newest first with filters and pagination."""
-    statement = select(Order).order_by(Order.id.desc())
+    # cast: Order.id is Optional[int] at type level (SQLModel PK pattern);
+    # persisted rows always carry an int, so .desc() is sound.
+    statement = select(Order).order_by(cast(Any, Order.id).desc())
     if customer_id is not None:
         statement = statement.where(Order.customer_id == customer_id)
     if status is not None:

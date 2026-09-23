@@ -1,4 +1,5 @@
 """GET queries, filters and pagination: every list endpoint."""
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import make_customer, make_product
@@ -148,9 +149,7 @@ def test_movements_filter_by_reason_and_pagination(client: TestClient):
     )
     ins = client.get("/inventory/movements", params={"reason": "IN"}).json()
     outs = client.get("/inventory/movements", params={"reason": "OUT"}).json()
-    by_product = client.get(
-        "/inventory/movements", params={"product_id": product["id"]}
-    ).json()
+    by_product = client.get("/inventory/movements", params={"product_id": product["id"]}).json()
     assert len(ins) >= 1 and all(m["reason"] == "IN" for m in ins)
     assert len(outs) == 1 and outs[0]["quantity_change"] == -1
     assert len(by_product) == len(ins) + len(outs)

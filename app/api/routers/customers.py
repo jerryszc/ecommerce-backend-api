@@ -1,5 +1,7 @@
 """Customer endpoints."""
 
+from typing import Any, cast
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
@@ -15,9 +17,7 @@ def create_customer(payload: Customer, session: Session = Depends(get_session)) 
     exists = session.exec(select(Customer).where(Customer.email == payload.email)).first()
     if exists:
         raise HTTPException(status_code=409, detail="Email already exists")
-    customer = Customer(
-        email=payload.email, full_name=payload.full_name, address=payload.address
-    )
+    customer = Customer(email=payload.email, full_name=payload.full_name, address=payload.address)
     session.add(customer)
     session.flush()
     session.refresh(customer)
@@ -34,8 +34,10 @@ def list_customers(
     """List customers with search and pagination."""
     statement = select(Customer).order_by(Customer.email)
     if q:
+        # cast: at class level SQLModel exposes Column descriptors, but mypy sees
+        # the instance type (str); the cast recovers the queryable expression.
         statement = statement.where(
-            (Customer.email.contains(q)) | (Customer.full_name.contains(q))
+            (cast(Any, Customer.email).contains(q)) | (cast(Any, Customer.full_name).contains(q))
         )
     statement = statement.offset(skip).limit(limit)
     return list(session.exec(statement).all())

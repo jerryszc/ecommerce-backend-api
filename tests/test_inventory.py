@@ -1,4 +1,5 @@
 """Integracion inventario: ajuste de stock + kardex (StockMovement)."""
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import make_product
@@ -33,9 +34,7 @@ def test_adjust_out_decreases_stock(client: TestClient):
 def test_adjust_zero_returns_400(client: TestClient):
     """Arrange/Act/Assert: quantity_change=0 → 400, stock intacto."""
     product = make_product(client, stock=7)
-    act = client.post(
-        "/inventory/adjust", json={"product_id": product["id"], "quantity_change": 0}
-    )
+    act = client.post("/inventory/adjust", json={"product_id": product["id"], "quantity_change": 0})
     assert act.status_code == 400
     assert client.get(f"/products/{product['id']}").json()["stock"] == 7
 

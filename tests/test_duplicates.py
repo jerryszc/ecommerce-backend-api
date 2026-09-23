@@ -1,4 +1,5 @@
 """Manejo de duplicados (409): SKU, email y categoria unicos."""
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import make_customer, make_product

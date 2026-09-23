@@ -1,4 +1,5 @@
 """Shared Pytest fixtures: isolated SQLite + TestClient (AAA support)."""
+
 import uuid
 
 import pytest

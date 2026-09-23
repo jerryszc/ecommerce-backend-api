@@ -1,5 +1,7 @@
 """Inventory endpoints: stock adjustments and kardex."""
 
+from typing import Any, cast
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
@@ -55,7 +57,9 @@ def list_movements(
     limit: int = Query(default=50, ge=1, le=100),
 ) -> list[StockMovement]:
     """List kardex movements newest first with filters and pagination."""
-    statement = select(StockMovement).order_by(StockMovement.id.desc())
+    # cast: StockMovement.id is Optional[int] at type level (SQLModel PK pattern);
+    # persisted rows always carry an int, so .desc() is sound.
+    statement = select(StockMovement).order_by(cast(Any, StockMovement.id).desc())
     if product_id is not None:
         statement = statement.where(StockMovement.product_id == product_id)
     if reason is not None:

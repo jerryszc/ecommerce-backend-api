@@ -1,6 +1,7 @@
 """Idempotent initial seed: categories, products, demo customer."""
 
 from decimal import Decimal
+from typing import Any
 
 from sqlmodel import Session, select
 
@@ -13,7 +14,7 @@ from app.models.stock_movement import MovementReason, StockMovement
 
 CATEGORIES = ["Electronica", "Hogar", "Libros"]
 
-PRODUCTS: list[dict[str, object]] = [
+PRODUCTS: list[dict[str, Any]] = [
     {
         "sku": "ELEC-001",
         "name": "Laptop 14",
@@ -105,8 +106,8 @@ def run_seed() -> None:
                 session,
                 sku=str(item["sku"]),
                 name=str(item["name"]),
-                price=item["price"],  # type: ignore[arg-type]
-                stock=int(item["stock"]),  # type: ignore[arg-type]
+                price=item["price"],
+                stock=int(item["stock"]),
                 category_id=category.id,
             )
         get_or_create_customer(session, "demo@tienda.com", "Cliente Demo")

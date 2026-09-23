@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from sqlmodel import SQLModel
 
-import app.models  # noqa: F401  (register metadata)
+from app import models  # noqa: F401  (register metadata)
 from app.api.routers import categories, customers, inventory, orders, products
 from app.core.database import engine
 

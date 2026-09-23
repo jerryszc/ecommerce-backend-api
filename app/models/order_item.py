@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class OrderItem(SQLModel, table=True):
     """Line item with price frozen at purchase time."""
 
-    __tablename__ = "order_item"  # type: ignore[assignment]
+    __tablename__ = "order_item"
 
     id: int | None = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order_.id", index=True)

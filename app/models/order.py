@@ -27,7 +27,7 @@ class OrderStatus(StrEnum):
 class Order(SQLModel, table=True):
     """Customer purchase. Total is computed from its items."""
 
-    __tablename__ = "order_"  # type: ignore[assignment]
+    __tablename__ = "order_"
 
     id: int | None = Field(default=None, primary_key=True)
     customer_id: int = Field(foreign_key="customer.id", index=True)

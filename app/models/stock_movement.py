@@ -26,7 +26,7 @@ class MovementReason(StrEnum):
 class StockMovement(SQLModel, table=True):
     """One row per stock change. Allows rebuilding Product.stock."""
 
-    __tablename__ = "stock_movement"  # type: ignore[assignment]
+    __tablename__ = "stock_movement"
 
     id: int | None = Field(default=None, primary_key=True)
     product_id: int = Field(foreign_key="product.id", index=True)

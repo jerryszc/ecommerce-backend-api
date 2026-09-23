@@ -1,4 +1,5 @@
 """Validaciones Pydantic (422): bad payloads nunca llegan a negocio/DB."""
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import make_customer, make_product
@@ -10,7 +11,10 @@ def test_order_quantity_zero_returns_422(client: TestClient):
     product = make_product(client, stock=10)
     resp = client.post(
         "/orders",
-        json={"customer_id": customer["id"], "lines": [{"product_id": product["id"], "quantity": 0}]},
+        json={
+            "customer_id": customer["id"],
+            "lines": [{"product_id": product["id"], "quantity": 0}],
+        },
     )
     assert resp.status_code == 422
 
@@ -21,7 +25,10 @@ def test_order_quantity_negative_returns_422(client: TestClient):
     product = make_product(client, stock=10)
     resp = client.post(
         "/orders",
-        json={"customer_id": customer["id"], "lines": [{"product_id": product["id"], "quantity": -5}]},
+        json={
+            "customer_id": customer["id"],
+            "lines": [{"product_id": product["id"], "quantity": -5}],
+        },
     )
     assert resp.status_code == 422
 

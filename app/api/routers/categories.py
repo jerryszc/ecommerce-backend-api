@@ -1,5 +1,7 @@
 """Category endpoints."""
 
+from typing import Any, cast
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
@@ -30,9 +32,13 @@ def list_categories(
     limit: int = Query(default=50, ge=1, le=100),
 ) -> list[Category]:
     """List categories with search and pagination."""
-    statement = select(Category).order_by(Category.id)
+    # cast: Category.id is Optional[int] at type level (SQLModel PK pattern);
+    # persisted rows always carry an int, so order_by is sound.
+    statement = select(Category).order_by(cast(Any, Category.id))
     if q:
-        statement = statement.where(Category.name.contains(q))
+        # cast: at class level SQLModel exposes Column descriptors, but mypy sees
+        # the instance type (str); the cast recovers the queryable expression.
+        statement = statement.where(cast(Any, Category.name).contains(q))
     statement = statement.offset(skip).limit(limit)
     return list(session.exec(statement).all())
 

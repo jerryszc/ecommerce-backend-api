@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class Customer(SQLModel, table=True):
     """Buyer placing orders."""
 
-    __tablename__ = "customer"  # type: ignore[assignment]
+    __tablename__ = "customer"
 
     id: int | None = Field(default=None, primary_key=True)
     email: str = Field(unique=True, index=True, max_length=255)

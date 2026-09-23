@@ -18,10 +18,10 @@ select = [
     "E", "W", "F", "I", "N", "UP", "B", "C4", "T20"
 ]
 ignore = ["E501", "B008"]  # line too long (handled by formatter); B008 is standard FastAPI pattern
-per-file-ignores = {
-    "app/alembic/*" = ["I001", "E402", "W291", "UP035", "UP007"],  # migrations are generated
-    "tests/*" = ["S101", "T201", "B008"],  # tests can use assert, print, and Depends
-}
+
+[tool.ruff.lint.per-file-ignores]
+"app/alembic/*" = ["I001", "E402", "W291", "UP035", "UP007"]  # migrations are generated
+"tests/*" = ["S101", "T201", "B008"]  # tests can use assert, print, and Depends
 
 [tool.ruff.format]
 quote-style = "double"
@@ -41,8 +41,13 @@ show_error_codes = true
 pretty = true
 
 [[tool.mypy.overrides]]
-module = ["alembic.*", "sqlalchemy.*", "pydantic.*", "pydantic_settings.*"]
+module = ["sqlalchemy.*", "pydantic.*", "pydantic_settings.*"]
 ignore_missing_imports = true
+
+# Alembic migrations are auto-generated; exclude them from strict typing.
+[[tool.mypy.overrides]]
+module = "app.alembic.*"
+ignore_errors = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

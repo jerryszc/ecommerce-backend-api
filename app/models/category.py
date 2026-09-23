@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class Category(SQLModel, table=True):
     """Product grouping (e.g. Electronics, Books)."""
 
-    __tablename__ = "category"  # type: ignore[assignment]
+    __tablename__ = "category"
 
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(unique=True, index=True, max_length=100)

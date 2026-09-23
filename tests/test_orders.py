@@ -1,4 +1,5 @@
 """Integridad transaccional de ordenes: stock, rollback atomico y kardex."""
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import make_customer, make_product
@@ -43,7 +44,10 @@ def test_order_insufficient_stock_single_line_rolls_back(client: TestClient):
 
     act = client.post(
         "/orders",
-        json={"customer_id": customer["id"], "lines": [{"product_id": product["id"], "quantity": 5}]},
+        json={
+            "customer_id": customer["id"],
+            "lines": [{"product_id": product["id"], "quantity": 5}],
+        },
     )
     assert act.status_code == 400
     assert "Insufficient stock" in act.json()["detail"]
@@ -98,7 +102,10 @@ def test_order_inactive_product_rejected_and_no_side_effects(client: TestClient)
     inactive = resp.json()
     act = client.post(
         "/orders",
-        json={"customer_id": customer["id"], "lines": [{"product_id": inactive["id"], "quantity": 1}]},
+        json={
+            "customer_id": customer["id"],
+            "lines": [{"product_id": inactive["id"], "quantity": 1}],
+        },
     )
     assert act.status_code == 400
     assert "inactive" in act.json()["detail"]

@@ -10,9 +10,7 @@ from app.models.product import Product
 from app.models.stock_movement import MovementReason, StockMovement
 
 
-def create_order(
-    session: Session, customer_id: int, lines: list[tuple[int, int]]
-) -> Order:
+def create_order(session: Session, customer_id: int, lines: list[tuple[int, int]]) -> Order:
     """Create an order discounting stock atomically.
 
     Args:

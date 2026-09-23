@@ -1,6 +1,7 @@
 """Product endpoints."""
 
 from decimal import Decimal
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
@@ -46,8 +47,10 @@ def list_products(
     """List products with search, filters and pagination."""
     statement = select(Product).order_by(Product.name)
     if q:
+        # cast: at class level SQLModel exposes Column descriptors, but mypy sees
+        # the instance type (str); the cast recovers the queryable expression.
         statement = statement.where(
-            (Product.sku.contains(q)) | (Product.name.contains(q))
+            (cast(Any, Product.sku).contains(q)) | (cast(Any, Product.name).contains(q))
         )
     if category_id is not None:
         statement = statement.where(Product.category_id == category_id)
