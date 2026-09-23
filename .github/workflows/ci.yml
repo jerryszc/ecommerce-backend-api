@@ -8,11 +8,6 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: postgres
-  POSTGRES_DB: proyecto_1
-  DB_HOST: localhost
-  DB_PORT: 5432
 
 jobs:
   lint:
@@ -63,21 +58,8 @@ jobs:
         run: mypy app
 
   test:
-    name: Tests (pytest + coverage)
+    name: Tests (pytest)
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: proyecto_1
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres -d proyecto_1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,34 +76,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Wait for PostgreSQL
-        run: |
-          sleep 5
-          pg_isready -h localhost -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }}
-
-      - name: Run migrations
-        run: |
-          alembic upgrade head
-        env:
-          DATABASE_URL: postgresql+psycopg2://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
-
-      - name: Run tests with coverage
+      # The suite runs on in-memory SQLite (see tests/conftest.py): no external
+      # services and no migrations are required for these tests.
+      - name: Run tests
         run: pytest
-        env:
-          DATABASE_URL: postgresql+psycopg2://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
-          DB_HOST: ${{ env.DB_HOST }}
-          DB_PORT: ${{ env.DB_PORT }}
-          DB_NAME: ${{ env.POSTGRES_DB }}
-          DB_USER: ${{ env.POSTGRES_USER }}
-          DB_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-xml
-          path: coverage.xml
-          retention-days: 7
 
   docker:
     name: Docker Build & Smoke Test
