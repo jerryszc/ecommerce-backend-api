@@ -1,6 +1,7 @@
 # E-Commerce Inventory & Order Backend
 
 ![CI](https://github.com/jerryszc/ecommerce-backend-api/actions/workflows/ci.yml/badge.svg)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://ecommerce-backend-api-v3m9.onrender.com/health)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
