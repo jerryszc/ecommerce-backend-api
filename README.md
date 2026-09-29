@@ -1,307 +1,373 @@
-# E-Commerce Inventory & Order Backend
+# E-Commerce Backend API — Inventory & Orders
 
-![CI](https://github.com/jerryszc/ecommerce-backend-api/actions/workflows/ci.yml/badge.svg)
-[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://ecommerce-backend-api-v3m9.onrender.com/health)
-![Python](https://img.shields.io/badge/python-3.11-blue)
-![Docker](https://img.shields.io/badge/docker-ready-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+**[English version →](README.en.md)**
 
-> **Executive Summary:** Transactional backend designed to eliminate consistency loss in concurrent inventories and guarantee atomicity in e-commerce order processing.
+API transaccional de e-commerce con control de concurrencia a nivel de fila, kardex de
+inventario y garantía de atomicidad en la creación de pedidos.
 
----
+[![CI](https://github.com/jerryszc/ecommerce-backend-api/actions/workflows/ci.yml/badge.svg)](https://github.com/jerryszc/ecommerce-backend-api/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg)](https://fastapi.tiangolo.com/)
+[![MyPy strict](https://img.shields.io/badge/mypy-strict%20%7C%20passed-brightgreen.svg)](pyproject.toml)
+[![Tests](https://img.shields.io/badge/tests-34%20passing%20%7C%20coverage%20gate%2080%25-brightgreen.svg)](tests)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## The Business Problem
-
-In conventional e-commerce platforms, two critical failures compromise financial operations:
-
-1. **Inventory race conditions:** Multiple users purchasing the last unit of a product simultaneously, generating negative stock.
-2. **Transactional inconsistencies:** Purchase orders failing mid-way through the payment/inventory flow, leaving databases with orphaned or outdated records.
+**Stack:** Python 3.11 · FastAPI · SQLModel · SQLAlchemy · PostgreSQL 15 · Alembic · Pytest · Ruff · MyPy strict · Docker
 
 ---
 
-## Engineering Solution Implemented
+## El problema empresarial
 
-* **Transactional Shielding:** Explicit transaction control (`commit`/`rollback` + `SELECT ... FOR UPDATE` in `app/services/order_service.py`) to guarantee absolute atomicity in concurrent sales. No negative stock, no partial orders.
-* **Fail-Fast Boundary Validation:** Strict schemas with `Pydantic` to reject anomalies before persistence, returning typed errors (`422 Unprocessable Entity` for validation, `409 Conflict` for duplicates).
-* **Guaranteed Quality (QA):** Hardened architecture with a suite of **34 automated tests (`pytest`)** focused on critical flows and edge cases — atomic orders/rollback, inventory/kardex, validation, filters/pagination — ensuring zero regressions in production.
+La sobreventa es uno de los fallos más comunes y más caros de una tienda online. Ocurre
+así: dos clientes compran la última unidad del mismo producto en el mismo segundo. Ambos
+leen el stock disponible, ambos ven `stock = 1`, y ambos confirman la compra. La base de
+datos ahora tiene **dos pedidos sobre una unidad que no existía**.
+
+| Problema | Costo real | Qué lo resuelve aquí |
+| :--- | :--- | :--- |
+| **Sobreventa por condición de carrera.** Dos pedidos concurrentes leen el mismo stock antes de que ninguno escriba | Pedidos que no se pueden surtir: reembolso, cancelación y envío urgente. En marketplaces como Amazon y eBay, la sobreventa reiterada es causa directa de suspensión de cuenta del vendedor | Bloqueo pesimista de fila con `SELECT ... FOR UPDATE` por producto: el segundo pedido **espera** a que el primero confirme, y entonces ve el stock real |
+| **Pedidos que se guardan a medias.** Si la tercera línea de un pedido de diez falla, un diseño ingenuo deja las dos primeras descontadas del inventario | Inventario desincronizado respecto a lo cobrado. El cliente pagó por algo que el sistema ya no registra | Una sola transacción para todas las líneas: o se guarda el pedido completo, o no se guarda nada y el stock vuelve intacto |
+| **Stock que cambia sin rastro.** Un ajuste manual, un error de carga, un faltante en bodega: nada explica por qué el inventario dice 12 | Imposible conciliar, imposible auditar, imposible distinguir un error de datos de una pérdida real | Kardex: cada movimiento de stock se registra con cantidad, motivo, stock resultante y, si aplica, el pedido que lo originó |
+| **Dinero en coma flotante.** `0.1 + 0.2` en punto flotante no es `0.3` | Errores de redondeo que se acumulan y terminan en desacuerdos de caja y problemas con la declaración de impuestos | `Decimal` con `max_digits` y `decimal_places` explícitos en toda la columna monetaria |
 
 ---
 
-## Tech Stack & Business Justification
+## Impacto verificable
 
-| Technology | Version | Technical Purpose | Business Value |
+Todo lo que sigue está respaldado por el código de este repositorio y por tests con nombre
+específico. No hay métricas de negocio estimadas: cada garantía tiene su prueba.
+
+| Garantía | Test que la demuestra |
+| :--- | :--- |
+| Un pedido de una sola línea sin stock suficiente no deja nada a medias | `test_order_insufficient_stock_single_line_rolls_back` |
+| Un pedido de varias líneas es **atómico**: si una línea falla, ninguna se aplica | `test_order_multi_line_atomic_rollback` |
+| Un producto inactivo no se puede pedir y no produce efectos secundarios | `test_order_inactive_product_rejected_and_no_side_effects` |
+| Un ajuste que excede el stock se rechaza (400) y **no** deja un movimiento huérfano | `test_adjust_insufficient_stock_returns_400_and_no_movement` |
+| Un ajuste de stock escribe su entrada de kardex con el stock resultante | `test_adjust_in_increases_stock_and_kardex` |
+| SKU duplicado devuelve 409 | `test_duplicate_sku_returns_409` |
+| Email duplicado devuelve 409 | `test_duplicate_email_returns_409` |
+| Cantidad cero o negativa en un pedido devuelve 422 | `test_order_quantity_zero_returns_422`, `test_order_quantity_negative_returns_422` |
+| La paginación inválida se rechaza con 422 en vez de devolver la base entera | `test_categories_invalid_pagination_422` |
+| El filtro por rango de precio y paginación funciona en productos | `test_products_price_range_and_pagination` |
+| El filtro de órdenes por cliente y estado funciona | `test_orders_filter_by_customer_and_status` |
+
+**34 tests** en 5 módulos, con un gate de cobertura del **80%** definido en la configuración
+de Pytest: la CI falla si la cobertura baja de ese umbral.
+
+---
+
+## La garantía transaccional
+
+Es la pieza central del proyecto. Todo ocurre en `app/services/order_service.py`:
+
+```python
+for product_id, quantity in lines:
+    product = session.exec(
+        select(Product).where(Product.id == product_id).with_for_update()
+    ).one_or_none()
+
+    if product.stock < quantity:
+        raise ValueError(f"Insufficient stock for product {product_id}")
+
+    product.stock -= quantity
+    session.add(product)
+    session.add(StockMovement(
+        product_id=product.id,
+        quantity_change=-quantity,
+        quantity_after=product.stock,
+        reason=MovementReason.OUT,
+        order_id=order.id,
+    ))
+```
+
+**Qué hace, en orden:**
+
+1. `with_for_update()` acquires a **bloqueo de fila** en PostgreSQL. Cualquier otra
+   transacción que intente leer ese mismo producto **espera** hasta que esta termine.
+   Esto es lo que elimina la sobreventa.
+2. Se valida el stock disponible. Si no alcanza, se lanza la excepción **antes** de
+   escribir nada.
+3. Se descuenta el stock y se registra el movimiento de kardex con el stock resultante.
+4. `session.flush()` asigna el `order.id` sin confirmar la transacción, de modo que las
+   líneas y el kardex puedan referenciar al pedido.
+
+**El control de commit es del llamador** (`app/api/deps.py`):
+
+```python
+def get_session() -> Generator[Session, None, None]:
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+```
+
+Una única transacción envuelve todas las líneas del pedido. Cualquier excepción dispara
+`rollback()`, y como el descuento de stock ocurre dentro de esa misma transacción, el
+inventario vuelve a su estado anterior junto con el pedido.
+
+**Por qué pesimista y no optimista.** El patrón optimista (reintentar si el `version`
+cambió) sirve para sistemas con conflictos raros. En un checkout de e-commerce los
+conflictos sobre el mismo SKU son **frecuentes** — un producto popular concentra la
+mayoría de las compras. Bloquear y serializar es más simple de razonar y más rápido en
+esa carga, porque un reintento en un pico de tráfico solo mueve el problema.
+
+---
+
+## Modelo de datos
+
+**6 tablas.**
+
+| Tabla | Campos clave | Restricciones |
+| :--- | :--- | :--- |
+| `category` | `name` (UNIQUE, index), `description` | `name` máximo 100 caracteres |
+| `product` | `sku` (UNIQUE, index), `name` (index), `price` (Decimal), `stock`, `is_active`, `category_id` (FK) | `price` ≥ 0 con 10 dígitos / 2 decimales · `stock` ≥ 0 |
+| `customer` | `email` (UNIQUE, index), `full_name`, `address` | `email` máximo 255 caracteres |
+| `order_` | `customer_id` (FK, index), `status` (enum), `total` (Decimal 12/2) | `created_at` y `updated_at` gestionados por la app |
+| `order_item` | `order_id` (FK), `product_id` (FK), `quantity`, `unit_price` (Decimal 10/2) | `quantity` > 0 · `unit_price` ≥ 0 |
+| `stock_movement` | `product_id` (FK), `quantity_change`, `quantity_after`, `reason` (enum), `order_id` (FK opcional) | Kardex: `quantity_after` ≥ 0 |
+
+**Relaciones:** Category 1→N Product · Customer 1→N Order · Order 1→N OrderItem ·
+Product 1→N OrderItem · Product 1→N StockMovement · Order 1→N StockMovement
+
+**Decisiones de diseño**
+
+- **`Decimal` para todo el dinero**, nunca `float`. `price`, `unit_price` y `total` declaran
+  `max_digits` y `decimal_places`.
+- **Cantidades validadas en el modelo**, no solo en el endpoint: `stock` con `ge=0`,
+  `quantity` con `gt=0`. La base de datos rechaza datos imposibles aunque alguien escriba
+  directamente contra la API.
+- **Kardex como tabla de primera clase**, no como log. Es consultable y reconciliable.
+
+---
+
+## API
+
+| Método | Ruta | Descripción | Éxito |
 | :--- | :--- | :--- | :--- |
-| **Python** | 3.10+ | Core language | Mature ecosystem, type hints, async support |
-| **FastAPI** | 0.141.1 | Async, typed API development (`app/main.py`, `app/api/routers/`) | High performance, automatic OpenAPI docs, clear contracts |
-| **SQLModel** | 0.0.42 | ORM + Pydantic integration (`app/models/`) | Single source of truth for DB models & API schemas |
-| **SQLAlchemy** | 2.0.54 | Core ORM engine (`app/core/database.py`) | Mature relational persistence, connection pooling |
-| **Pydantic / Pydantic-Settings** | 2.11.0 / 2.15.0 | Validation & config (`app/core/config.py`, `app/api/routers/`) | Eliminates logic bugs from malformed data; 12-factor config |
-| **PostgreSQL** | 15 (prod) / SQLite (tests) | Relational persistence (`docker-compose.yml`) | ACID guarantees, referential integrity, `FOR UPDATE` locking |
-| **psycopg2-binary** | 2.9.13 | PostgreSQL driver | Production-grade async-safe connectivity |
-| **Alembic** | 1.20.0 | Database migrations (`app/alembic/`) | Version-controlled schema evolution |
-| **Docker / Docker Compose** | Latest | Containerization (`Dockerfile`, `docker-compose.yml`) | Reproducible `api + postgres` environments, prod parity |
-| **Pytest** | Latest | Automated testing (`tests/` + `pytest.ini`) | Safe deployments, lower maintenance costs |
-| **Uvicorn** | 0.53.0 | ASGI server | High-performance async HTTP server |
+| GET | `/health` | Sonda de salud | 200 |
+| POST | `/categories` | Crear categoría | 201 |
+| GET | `/categories` | Listar con `?q=` y paginación | 200 |
+| GET | `/categories/{id}` | Detalle | 200 |
+| POST | `/products` | Crear producto | 201 |
+| GET | `/products` | Listar con `?q=`, `category_id`, `is_active`, `min_price`, `max_price`, paginación | 200 |
+| GET | `/products/{id}` | Detalle | 200 |
+| POST | `/customers` | Crear cliente | 201 |
+| GET | `/customers` | Listar con `?q=` y paginación | 200 |
+| GET | `/customers/{id}` | Detalle | 200 |
+| POST | `/orders` | Crear pedido (transaccional) | 201 |
+| GET | `/orders` | Listar con `?customer_id=`, `status=`, paginación | 200 |
+| GET | `/orders/{id}` | Detalle con líneas | 200 |
+| POST | `/inventory/adjust` | Ajustar stock manualmente, genera kardex | 201 |
+| GET | `/inventory/movements` | Consultar kardex con `?product_id=`, `reason=`, paginación | 200 |
 
----
+**Documentación interactiva:** `/docs` (Swagger) y `/redoc`.
 
-## Architecture & Key Features
+### Estrategia de errores
 
-### Modular Layer Structure
-```
-app/
-├── api/
-│   ├── deps.py           # Shared dependencies (DB session with commit/rollback)
-│   └── routers/          # REST endpoints (categories, products, customers, orders, inventory)
-├── core/
-│   ├── config.py         # Pydantic-Settings: 12-factor env config (.env)
-│   ├── database.py       # SQLAlchemy engine + session factory (pool_pre_ping)
-│   └── datetime.py       # Shared UTC helpers (naive UTC, no deprecated utcnow)
-├── models/               # SQLModel table definitions (Category, Product, Customer, Order, OrderItem, StockMovement)
-├── schemas/              # (Reserved for future Pydantic response models)
-├── services/
-│   └── order_service.py  # Atomic order creation with FOR UPDATE locking + kardex
-├── main.py               # FastAPI entrypoint, router registration, health check
-└── seed.py               # Idempotent demo data seeding
-```
+Los códigos no son arbitrarios: cada uno distingue una causa que el cliente debe tratar de
+forma distinta.
 
-### Domain Model (ER Overview)
-```
-Category (1) ───< (M) Product (1) ───< (M) OrderItem >─── (M) Order >─── (M) Customer
-                              │
-                              └───< (M) StockMovement (kardex/audit trail)
-```
-* **Product:** Cached `stock` column + full `StockMovement` history for rebuild/audit.
-* **Order:** Header with computed `total`; status enum (`PENDING`, `PAID`, `SHIPPED`, `CANCELLED`).
-* **OrderItem:** Frozen `unit_price` at purchase time; cascade delete with order.
-* **StockMovement:** `quantity_change` (+IN/-OUT), `quantity_after`, `reason` (IN, OUT, ADJUST, RESERVE, RELEASE), optional `order_id` link.
+| Código | Cuándo | Ejemplo |
+| :--- | :--- | :--- |
+| `201` | Recurso creado correctamente | `POST /products` |
+| `400` | Petición válida en forma pero imposible de satisfacer | Ajuste sin stock suficiente, `quantity_change = 0`, producto inexistente en un pedido |
+| `404` | El recurso no existe | `GET /orders/999` |
+| `409` | Conflicto con el estado actual: duplicado | SKU repetido, email repetido, categoría repetida |
+| `422` | Falla la validación de esquema, antes de tocar la base de datos | `quantity = 0`, `lines = []`, `price` negativo, paginación fuera de rango |
 
-### Concurrency Control & Transactional Guarantees
-* **Pessimistic Locking:** `SELECT ... FOR UPDATE` (`with_for_update()`) on `Product` rows during order creation and inventory adjustment (`app/services/order_service.py:38`, `app/api/routers/inventory.py:28`).
-* **Explicit Transaction Boundary:** Request-scoped session via `get_session()` dependency (`app/api/deps.py`, `app/core/database.py`) — commits on success, rolls back on any exception, closes in `finally`.
-* **Atomic Multi-Line Orders:** `create_order()` flushes order to get `id`, processes all lines under same transaction; any `ValueError` (insufficient stock, inactive product, not found) triggers full rollback — no partial orders, no phantom stock deductions.
+`422` lo produce Pydantic de forma nativa sobre las restricciones del modelo
+(`Field(gt=0)`, `Field(ge=0)`, `min_length=1`, `Query(ge=0, le=100)`), así que un cliente
+recibe el detalle del campo inválido sin que haga falta escribir una validación a mano.
 
-### Validation & Error Handling Strategy
-| Layer | Mechanism | HTTP Code | Example |
-| :--- | :--- | :--- | :--- |
-| **Input (Pydantic)** | `Field(gt=0)`, `ge=0`, `min_length=1`, `max_length`, `unique` constraints | `422 Unprocessable Entity` | Negative quantity, empty lines, price < 0 |
-| **Business Rules** | Explicit checks in service/router (`if product.stock < qty`, `if not product.is_active`) | `400 Bad Request` | Insufficient stock, inactive product, not found |
-| **Uniqueness** | DB `UNIQUE` indexes + pre-insert `SELECT` in routers | `409 Conflict` | Duplicate SKU, email, category name |
-| **Not Found** | `session.get()` + explicit check | `404 Not Found` | Missing product, customer, order, category |
+### Paginación
 
-### Observability & Operations
-* **Health Check:** `GET /health` → `{"status": "ok"}` (used by Docker `HEALTHCHECK` and Compose `depends_on: condition: service_healthy`).
-* **Structured Logging:** SQLAlchemy `echo=False` (configurable), Alembic `INFO` level.
-* **Container Security:** Non-root user (`appuser`), `PYTHONDONTWRITEBYTECODE=1`, `PYTHONUNBUFFERED=1`, pip cache disabled.
-
----
-
-## Quick Start
-
-### Prerequisites
-* Docker 24+ with Compose v2 (recommended)
-* Or: Python 3.10+, PostgreSQL 15+ (local)
-
----
-
-### Option A: Docker Compose (Recommended — Prod Parity)
+Todas las listas usan `skip` y `limit`, con límites validados: `skip ≥ 0` y `1 ≤ limit ≤ 100`.
+El techo del 100 existe para impedir que un cliente solicite la tabla completa en un solo
+request.
 
 ```bash
-# 1. Clone and configure
-git clone https://github.com/jerryszc/Ecommerce-backend-API.git
-cd Ecommerce-backend-API
-cp .env.example .env
-
-# 2. Build and run (API + PostgreSQL 15)
-docker compose up --build
+curl "http://localhost:8000/products?category_id=1&is_active=true&min_price=10&max_price=100&skip=0&limit=20"
 ```
 
-**What starts:**
-| Service | Image | Port | Details |
-| :--- | :--- | :--- | :--- |
-| `db` | `postgres:15-alpine` | `5432` | Volume `pgdata`, `pg_isready` healthcheck (5s interval, 10 retries) |
-| `api` | Built from `Dockerfile` | `8000` | Waits for `db` healthy → `alembic upgrade head` → `uvicorn app.main:app --host 0.0.0.0 --port 8000` |
+---
 
-**Verify:**
-* Health: `http://127.0.0.1:8000/health`
-* Swagger UI: `http://127.0.0.1:8000/docs`
-* ReDoc: `http://127.0.0.1:8000/redoc`
+## Pruebas
 
-**Seed demo data (idempotent: 3 categories, 4 products, 1 customer):**
+**34 tests** en 5 módulos, organizados por la garantía que verifican y no por el archivo
+del código que ejercitan.
+
+| Módulo | Tests | Cubre |
+| :--- | :--- | :--- |
+| `test_orders.py` | 6 | Camino feliz, rollback por falta de stock en una y en varias líneas, producto inactivo, producto inexistente, 404 |
+| `test_inventory.py` | 6 | Ajustes de entrada y salida, kardex, `quantity_change = 0` (400), stock insuficiente (400) sin movimiento huérfano, 404, filtro por producto |
+| `test_validation.py` | 9 | Cantidad cero, negativa, líneas vacías, `product_id` inválido, campos faltantes, precio y stock negativos |
+| `test_get_filters.py` | 9 | Búsqueda y paginación en las cuatro entidades, filtros de categoría, estado, rango de precio, cliente, estado de orden y motivo de movimiento, paginación inválida (422) |
+| `test_duplicates.py` | 4 | SKU, email y categoría duplicados (409), y el caso válido de mismo nombre con SKU distinto |
+
+```bash
+# Suite completa con cobertura (el gate del 80% se aplica solo)
+pytest
+
+# Ver el detalle de cobertura
+pytest --cov=app --cov-report=term-missing
+
+# Solo las pruebas transaccionales, que son el corazón del proyecto
+pytest -k "order or stock"
+```
+
+El `--cov-fail-under=80` está en `addopts` de `pyproject.toml`, así que no se puede
+ejecutar la suite saltándose el control de cobertura.
+
+---
+
+## Integración continua
+
+`.github/workflows/ci.yml` define **4 jobs** que se ejecutan en paralelo, más un quinto
+que notifica si cualquiera falla:
+
+| Job | Qué hace |
+| :--- | :--- |
+| **Lint** | `ruff check .` y `ruff format --check .` |
+| **Typecheck** | `mypy app` en modo `strict = true` |
+| **Tests** | `pytest` con cobertura y gate del 80% |
+| **Docker Build & Smoke Test** | Construye la imagen, levanta el compose y verifica `/health` con `curl -f`; si falla, vuelca los logs del contenedor |
+| **Notify on Failure** | Job aggregator con `needs: [lint, typecheck, test, docker]` |
+
+El smoke test en Docker es la parte que más valor aporta a un reclutador: no basta con que
+la imagen **construya**, tiene que **arrancar y responder** en un entorno limpio.
+
+**Configuración de Ruff:** `line-length = 100`, `target-version = "py311"`, reglas
+`E, W, F, I, N, UP, B, C4, T20`. Las migraciones de Alembic están excluidas de reglas de
+importación y formato porque son generadas.
+
+**Configuración de MyPy:** `strict = true` con `disallow_untyped_defs`,
+`disallow_incomplete_defs`, `no_implicit_optional` y `warn_return_any`. Las migraciones de
+Alembic están excluidas del chequeo estricto por ser autogeneradas.
+
+---
+
+## Puesta en marcha
+
+**Requisitos:** Docker Desktop en ejecución.
+
+```bash
+# 1. Clonar y entrar
+git clone https://github.com/jerryszc/ecommerce-backend-api.git
+cd ecommerce-backend-api
+
+# 2. Configurar el entorno
+cp .env.example .env
+
+# 3. Levantar la API y PostgreSQL 15
+docker compose up --build -d
+
+# 4. Verificar
+curl http://localhost:8000/health
+# {"status":"ok"}
+
+# 5. Documentación interactiva
+#    http://localhost:8000/docs
+```
+
+El servicio de base de datos tiene `healthcheck` con `pg_isready`, y la API arranca con
+`depends_on: condition: service_healthy`, de modo que las migraciones nunca corren contra
+una base de datos que aún no acepta conexiones. El comando de arranque es:
+
+```bash
+alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+**Detener el entorno**
+
+```bash
+docker compose down      # Conserva el volumen
+docker compose down -v   # Elimina también el volumen
+```
+
+### Datos de demostración
+
+`app/seed.py` es **idempotente**: se puede ejecutar varias veces sin duplicar datos.
+
 ```bash
 docker compose exec api python -m app.seed
 ```
 
-**Stop / Reset:**
-```bash
-docker compose down           # Stop containers, keep volume
-docker compose down -v        # Stop and delete pgdata volume (full reset)
-```
+Crea 3 categorías, 4 productos y 1 cliente.
 
----
-
-### Option B: Local Development (Fast Iteration / Native Pytest)
+### Desarrollo local sin Docker
 
 ```bash
-# 1. Prepare virtual environment
-python -m venv venv
-source venv/Scripts/activate      # Git Bash / Windows
-# venv\Scripts\activate           # CMD / PowerShell
+python -m venv .venv && source .venv/bin/activate   # Git Bash en Windows
 pip install -r requirements.txt
-
-# 2. Configure environment (PostgreSQL local)
 cp .env.example .env
-# Edit .env with your local Postgres credentials:
-# DB_HOST=localhost
-# DB_PORT=5432
-# DB_NAME=proyecto_1
-# DB_USER=postgres
-# DB_PASSWORD=your_secure_password
-
-# 3. Migrate and seed
 alembic upgrade head
-python -m app.seed
-
-# 4. Run API with hot reload
-uvicorn app.main:app --reload --port 8000
-
-# 5. Run test suite (34 tests, SQLite in-memory)
-pytest -v
-# Expected: 34 passed — inventory concurrency, negative-stock prevention, transactional rollback, strict validation
+uvicorn app.main:app --reload
 ```
 
----
-
-## API Endpoints Reference
-
-Base URL: `http://localhost:8000` (or your host)
-
-### Health
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| `GET` | `/health` | Liveness/readiness probe |
-
-### Categories (`/categories`)
-| Method | Path | Description | Response |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/categories` | Create category (unique name) | `201 Category` |
-| `GET` | `/categories` | List with search (`q`), pagination (`skip`, `limit`) | `200 List[Category]` |
-| `GET` | `/categories/{id}` | Get by ID | `200 Category` / `404` |
-
-### Products (`/products`)
-| Method | Path | Description | Response |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/products` | Create product (unique SKU, `price≥0`, `stock≥0`) | `201 Product` |
-| `GET` | `/products` | List with filters: `q` (sku/name), `category_id`, `is_active`, `min_price`, `max_price`, pagination | `200 List[Product]` |
-| `GET` | `/products/{id}` | Get by ID | `200 Product` / `404` |
-
-### Customers (`/customers`)
-| Method | Path | Description | Response |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/customers` | Create customer (unique email) | `201 Customer` |
-| `GET` | `/customers` | List with search (`q` on email/name), pagination | `200 List[Customer]` |
-| `GET` | `/customers/{id}` | Get by ID | `200 Customer` / `404` |
-
-### Orders (`/orders`) — **Transactional Core**
-| Method | Path | Description | Response |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/orders` | Place order: atomic stock decrement + kardex (`OUT` movements). Payload: `{customer_id, lines: [{product_id, quantity}]}` | `201 Order` / `400` (insufficient stock, inactive, not found) / `422` (validation) |
-| `GET` | `/orders` | List newest first; filters: `customer_id`, `status` (enum), pagination | `200 List[Order]` |
-| `GET` | `/orders/{id}` | Get by ID (includes items via relationship) | `200 Order` / `404` |
-
-### Inventory (`/inventory`) — Kardex / Stock Adjustments
-| Method | Path | Description | Response |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/inventory/adjust` | Adjust stock atomically with `FOR UPDATE` lock; creates `StockMovement`. Payload: `{product_id, quantity_change (+/-), reason (IN/OUT/ADJUST/RESERVE/RELEASE)}` | `201 StockMovement` / `400` (insufficient stock, qty=0) / `404` / `422` |
-| `GET` | `/inventory/movements` | Kardex list newest first; filters: `product_id`, `reason`, pagination | `200 List[StockMovement]` |
-
----
-
-## Testing Strategy
-
-**Framework:** `pytest` + `TestClient` (Starlette) + SQLite in-memory (`StaticPool`) for total isolation.
-
-**Coverage (34 tests):**
-| Module | Focus |
-| :--- | :--- |
-| `test_orders.py` | Happy path (stock discount, total, kardex), single-line rollback, multi-line atomic rollback, inactive product, not found |
-| `test_inventory.py` | IN/OUT adjustments, zero/negative guards, insufficient stock, not found, filter by product |
-| `test_validation.py` | Pydantic 422s: zero/negative quantities, empty lines, missing fields, negative price/stock |
-| `test_duplicates.py` | 409 conflicts: SKU, email, category name; same name different SKU allowed |
-| `test_get_filters.py` | Search (`q`), all filter combos, pagination boundaries, 422 on invalid pagination params |
-
-**Run:**
-```bash
-pytest -v            # Verbose
-pytest -x            # Stop on first failure
-pytest -k "order"    # Filter by keyword
-```
-
----
-
-## Database Migrations (Alembic)
+### Migraciones
 
 ```bash
-# Generate new revision (autogenerate from models)
-alembic revision --autogenerate -m "descriptive message"
-
-# Apply migrations
+alembic revision --autogenerate -m "descripcion"
 alembic upgrade head
-
-# Rollback one step
-alembic downgrade -1
-
-# Show history
-alembic history --verbose
+alembic current
 ```
-
-*Config:* `alembic.ini` points to `app/alembic/`; `env.py` reads `settings.database_url` from `.env`.
 
 ---
 
-## Environment Variables (`.env`)
+## Despliegue
 
-| Variable | Default | Description |
+`render.yaml` es un **Render Blueprint** listo para usar: servicio web con runtime Docker
+y una base de datos PostgreSQL, ambos en el plan gratuito, con las credenciales inyectadas
+automáticamente desde la base de datos y `healthCheckPath: /health`.
+
+```bash
+# En el dashboard de Render: New -> Blueprint -> conectar este repositorio
+```
+
+**Nota:** el plan gratuito de Render suspende el servicio tras un periodo de inactividad y
+lo despierta de nuevo en la siguiente petición, por lo que la primera carga puede tardar
+varios segundos. Esta configuración está lista para desplegarse, pero no hay una instancia
+pública activa mantenida en este momento.
+
+---
+
+## Alcance y limitaciones
+
+Ser explícito sobre lo que **no** tiene este proyecto importa tanto como lo que sí:
+
+- **No hay autenticación ni autorización.** No hay JWT, ni roles, ni login. Es una API
+  abierta por diseño, y quien la exponga debe ponerla detrás de un gateway autenticado.
+  La autorización por roles sí está implementada en
+  [`ecommerce-inventory-automator`](https://github.com/jerryszc/ecommerce-inventory-automator).
+- **No hay caché ni rate limiting.**
+- **No hay observabilidad** (logs estructurados, métricas, tracing). Está implementada en
+  el proyecto de inventario.
+- **SQLite no está soportado.** La URL de conexión se construye como
+  `postgresql+psycopg2://` en `app/core/config.py`, sin alternativa por entorno. Es
+  deliberado: los bloqueos de fila que hacen funcionar la garantía transaccional son
+  específicos de PostgreSQL, así que aceptar SQLite daría la impresión de que el
+  comportamiento concurrente está cubierto cuando no lo está.
+
+---
+
+## Variables de entorno
+
+| Variable | Por defecto | Descripción |
 | :--- | :--- | :--- |
-| `DB_HOST` | `localhost` | PostgreSQL host |
-| `DB_PORT` | `5432` | PostgreSQL port |
-| `DB_NAME` | `proyecto_1` | Database name |
-| `DB_USER` | `postgres` | Database user |
-| `DB_PASSWORD` | *required* | Database password |
-
-> **Never commit `.env`** — use `.env.example` as template. `pydantic-settings` loads `.env` automatically.
+| `DB_HOST` | `db` | Host de PostgreSQL (`localhost` fuera de Docker) |
+| `DB_PORT` | `5432` | Puerto |
+| `DB_NAME` | `proyecto_1` | Nombre de la base de datos |
+| `DB_USER` | `postgres` | Usuario |
+| `DB_PASSWORD` | `postgres` | Contraseña |
 
 ---
 
-## Project Structure
+## Licencia
 
-```
-.
-├── app/
-│   ├── alembic/              # Migration scripts + env.py
-│   ├── api/
-│   │   ├── deps.py           # DB session dependency
-│   │   └── routers/          # 5 REST routers
-│   ├── core/                 # Config, DB engine, datetime helpers
-│   ├── models/               # 6 SQLModel tables + enums
-│   ├── schemas/              # Reserved for response models
-│   ├── services/             # Business logic (order_service)
-│   ├── main.py               # FastAPI app factory
-│   └── seed.py               # Idempotent demo data
-├── tests/                    # 34 pytest cases (AAA pattern)
-├── .dockerignore
-├── .env.example
-├── .gitignore
-├── alembic.ini
-├── docker-compose.yml
-├── Dockerfile
-├── pytest.ini
-├── requirements.txt
-└── README.md
-```
-
----
-
-## License
-
-MIT — Free for personal and commercial use.
+MIT — uso libre comercial y educativo. Ver [LICENSE](LICENSE).
