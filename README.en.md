@@ -33,7 +33,7 @@ holds **two orders against one unit that never existed**.
 
 ---
 
-## Professional use: where this service fits
+## Use case: where this service fits
 
 This is not a FastAPI tutorial. It is the **order and inventory core** of an online store:
 the part that, when it is wrong, produces overselling and lost money. The same four

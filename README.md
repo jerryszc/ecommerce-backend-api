@@ -33,7 +33,7 @@ datos ahora tiene **dos pedidos sobre una unidad que no existía**.
 
 ---
 
-## Uso profesional: dónde encaja este servicio
+## Contexto de uso: dónde encaja este servicio
 
 Este repositorio no es un tutorial de FastAPI. Es el **núcleo de pedidos e inventario** de
 una tienda online: la parte que, si está mal, produce sobreventa y dinero perdido. Las
