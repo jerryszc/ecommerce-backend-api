@@ -33,6 +33,53 @@ holds **two orders against one unit that never existed**.
 
 ---
 
+## Professional use: where this service fits
+
+This is not a FastAPI tutorial. It is the **order and inventory core** of an online store:
+the part that, when it is wrong, produces overselling and lost money. The same four
+guarantees shown above are what separate a hobby from a system that can handle real money.
+
+**Where a company would use it**
+
+| Context | How it is used | Why it fits |
+| :--- | :--- | :--- |
+| **Own store with an online catalogue** | The frontend (Shopify, a custom build, a mobile app) calls this API to list products, create orders and check stock | The storefront does not need to know anything about concurrency: it places the order and the API guarantees there is no oversell |
+| **Marketplace or platform with several sellers** | Each order carries its own stock line and kardex entry, which makes commission settlement and per-seller reconciliation possible | `StockMovement` doubles as an auditable ledger, per order |
+| **Physical retail that also sells online** | Stock is shared: the physical store decrements through this API and the online channel sees the same number | One source of truth instead of two inventories that contradict each other |
+| **Wholesale or B2B with per-customer pricing** | The category and customer structure allows segmentation without duplicating the catalogue | `Decimal` and `StockMovement` leave the trail an audit requires |
+
+**What this adds over a FastAPI CRUD**
+
+A FastAPI CRUD takes an afternoon. What is genuinely hard, and what this project implements, is
+the part that shows up as a concurrency bug at 3am:
+
+- **Row locking is the guarantee, not a detail.** `SELECT ... FOR UPDATE` per product is what
+  makes the second buyer wait. Without it, two simultaneous requests read the same stock and
+  both confirm.
+- **One transaction for the whole order.** The classic bug — decrementing the first line and
+  failing on the third — leaves inventory out of sync with what was charged.
+- **The kardex answers "why is the stock 12?".** Without a movement log, that question has no
+  answer and inventory shrinkage becomes invisible.
+
+**What would be needed before production**
+
+- **Authentication and authorisation.** The API is currently open. It needs JWT with roles,
+  because in a real catalogue there is a difference between what a customer can see and what
+  an administrator can see. The same design is already solved in
+  [`ecommerce-inventory-automator`](https://github.com/jerryszc/ecommerce-inventory-automator).
+- **Rate limiting** per IP and per customer, so that a script cannot drain the stock.
+- **Observability**: metrics and traces, to detect degradation before customers do.
+- **Cursor-based pagination** on long listings, and route versioning (`/api/v1`) before there
+  are clients depending on the current shape.
+
+**Which role this work maps to**
+
+Backend Developer in e-commerce, logistics or retail tech. It is the kind of system that shows
+up inside teams that own the outcome: the business depends on stock being correct, so the work
+is measured by effects, not by endpoints.
+
+---
+
 ## Verifiable impact
 
 Everything below is backed by this repository's code and by specifically named tests. There

@@ -33,6 +33,55 @@ datos ahora tiene **dos pedidos sobre una unidad que no existía**.
 
 ---
 
+## Uso profesional: dónde encaja este servicio
+
+Este repositorio no es un tutorial de FastAPI. Es el **núcleo de pedidos e inventario** de
+una tienda online: la parte que, si está mal, produce sobreventa y dinero perdido. Las
+mismas cuatro garantías que se ven arriba son las que separan un hobby de un sistema que
+puede procesar dinero real.
+
+**En qué empresa tendría sentido**
+
+| Contexto | Cómo se usa | Por qué encaja aquí |
+| :--- | :--- | :--- |
+| **Tienda propia con catálogo online** | El frontend (Shopify, tienda a medida, app móvil) consume esta API para listar productos, crear pedidos y consultar stock | El frontend no necesita saber nada de concurrencia: pide el pedido y la API garantiza que no se sobrevenda |
+| **Marketplace o plataforma con varios vendedores** | Cada pedido genera su asiento en el kardex, lo que permite liquidar comisiones y conciliar por vendedor | `StockMovement` funciona como libro mayor auditable, con una entrada por pedido |
+| **Retail físico con venta online** | El stock es el mismo: la tienda física descuenta vía esta API y el online ve el mismo número | Una sola fuente de verdad en lugar de dos inventarios que se contradicen |
+| **Mayorista o B2B con precios por cliente** | La estructura de categorías y clientes permite segmentar sin duplicar el catálogo | `Decimal` y `StockMovement` dejan el rastro que exige una auditoría fiscal |
+
+**Qué aporta frente a un CRUD con FastAPI**
+
+Un CRUD con FastAPI se escribe en una tarde. Lo que cuesta de verdad, y que es lo que este
+proyecto implementa, es lo que aparece como un fallo de concurrencia a las 3 de la mañana:
+
+- **El bloqueo de fila es la garantía, no un detalle.** `SELECT ... FOR UPDATE` por producto
+  es lo que hace que el segundo comprador espere. Sin eso, dos peticiones simultáneas leen el
+  mismo stock y las dos confirman.
+- **Una sola transacción para todo el pedido.** El error clásico —descontar la primera línea y
+  fallar en la tercera— deja el inventario desincronizado respecto a lo cobrado.
+- **El kardex permite responder "¿por qué el stock es 12?".** Sin registro de movimientos, esa
+  pregunta no tiene respuesta y la pérdida de inventario se vuelve invisible.
+
+**Qué tendría que añadirse antes de ponerlo en producción**
+
+- **Autenticación y autorización.** Hoy la API es abierta. Necesita JWT con roles, porque en
+  un catálogo real hay diferencias entre lo que puede ver un cliente y lo que ve un
+  administrador. El mismo diseño ya está resuelto en
+  [`ecommerce-inventory-automator`](https://github.com/jerryszc/ecommerce-inventory-automator).
+- **Rate limiting** por IP y por cliente, para que un script no pueda agotar el stock.
+- **Observabilidad**: métricas y trazas, para detectar degradación antes de que llegue a los
+  clientes.
+- **Paginación por cursor** en los listados largos, y versionado de la ruta (`/api/v1`) antes
+  de que haya clientes que dependan de la forma actual.
+
+**A qué puesto corresponde este trabajo**
+
+Backend Developer en e-commerce, logística o retail tech. Es el tipo de sistema que aparece
+dentro de equipos que se hacen cargo del resultado: el negocio depende de que el stock sea
+correcto, y por eso se mide el trabajo por efectos, no por endpoints.
+
+---
+
 ## Impacto verificable
 
 Todo lo que sigue está respaldado por el código de este repositorio y por tests con nombre
