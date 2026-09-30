@@ -17,7 +17,14 @@ COPY alembic.ini ./
 COPY start.sh ./
 
 # Non-root for security
-RUN useradd -m appuser && chmod +x /code/start.sh && chown -R appuser:appuser /code
+# start.sh is normalised to LF here: a CRLF shebang makes Linux look for
+# an interpreter named "/bin/sh\r" and fail with "no such file or directory".
+# This runs even when the file arrives with Windows line endings, so it does
+# not depend on .gitattributes being honoured on every clone.
+RUN useradd -m appuser && \
+    sed -i 's/\r$//' /code/start.sh && \
+    chmod +x /code/start.sh && \
+    chown -R appuser:appuser /code
 USER appuser
 
 EXPOSE 8000
