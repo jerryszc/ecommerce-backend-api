@@ -5,6 +5,7 @@
 API transaccional de e-commerce con control de concurrencia a nivel de fila, kardex de
 inventario y garantía de atomicidad en la creación de pedidos.
 
+[![Live](https://img.shields.io/badge/live-ecommerce--backend--api--sh6c.onrender.com-brightgreen)](https://ecommerce-backend-api-sh6c.onrender.com/health)
 [![CI](https://github.com/jerryszc/ecommerce-backend-api/actions/workflows/ci.yml/badge.svg)](https://github.com/jerryszc/ecommerce-backend-api/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg)](https://fastapi.tiangolo.com/)
@@ -371,18 +372,59 @@ alembic current
 
 ## Despliegue
 
-`render.yaml` es un **Render Blueprint** listo para usar: servicio web con runtime Docker
-y una base de datos PostgreSQL, ambos en el plan gratuito, con las credenciales inyectadas
-automáticamente desde la base de datos y `healthCheckPath: /health`.
+**Instancia pública en marcha:**
 
-```bash
-# En el dashboard de Render: New -> Blueprint -> conectar este repositorio
+```
+https://ecommerce-backend-api-sh6c.onrender.com/health   ->  {"status":"ok"}
+https://ecommerce-backend-api-sh6c.onrender.com/docs      ->  OpenAPI interactivo
 ```
 
-**Nota:** el plan gratuito de Render suspende el servicio tras un periodo de inactividad y
-lo despierta de nuevo en la siguiente petición, por lo que la primera carga puede tardar
-varios segundos. Esta configuración está lista para desplegarse, pero no hay una instancia
-pública activa mantenida en este momento.
+La API está desplegada en Render con su propia base de datos PostgreSQL. Para probarla sin
+instalar nada:
+
+```bash
+# Estado
+curl https://ecommerce-backend-api-sh6c.onrender.com/health
+
+# Crear un pedido y ver el stock bajar (el bloqueo de fila en acción)
+curl -X POST https://ecommerce-backend-api-sh6c.onrender.com/categories \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Audio"}'
+
+curl -X POST https://ecommerce-backend-api-sh6c.onrender.com/products \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Auriculares","sku":"HP-100","price":"79.99","stock":4,"category_id":1}'
+
+curl -X POST https://ecommerce-backend-api-sh6c.onrender.com/customers \
+  -H "Content-Type: application/json" \
+  -d '{"full_name":"Comprador Demo","email":"demo@example.com"}'
+
+# 2 unidades: el stock pasa de 4 a 2 y se registra el kardex
+curl -X POST https://ecommerce-backend-api-sh6c.onrender.com/orders \
+  -H "Content-Type: application/json" \
+  -d '{"customer_id":1,"lines":[{"product_id":1,"quantity":2}]}'
+
+# 999 unidades: 400 y el stock NO cambia. La garantía, comprobada en producción.
+curl -i -X POST https://ecommerce-backend-api-sh6c.onrender.com/orders \
+  -H "Content-Type: application/json" \
+  -d '{"customer_id":1,"lines":[{"product_id":1,"quantity":999}]}'
+```
+
+### Cómo se desplegó
+
+`render.yaml` es un **Render Blueprint**: servicio web con runtime Docker y una base de datos
+PostgreSQL, ambos en plan gratuito, con las credenciales inyectadas automáticamente y
+`healthCheckPath: /health`. El `start.sh` del contenedor corre `alembic upgrade head` en cada
+arranque, así que las migraciones viajan con el despliegue.
+
+Un detalle que solo aparece en Linux: el `Dockerfile` normaliza `start.sh` a LF durante el
+build. Con los finales de línea de Windows, el shebang queda como `#!/bin/sh\r` y el kernel
+busca un intérprete llamado `/bin/sh\r`, que no existe. En Windows no se nota y en CI tampoco,
+porque el smoke test usa `docker compose` con otro entrypoint.
+
+**Nota:** el plan gratuito de Render suspende el servicio tras unos minutos sin tráfico y lo
+despierta en la petición siguiente. La primera carga puede tardar 30 segundos o más. Es el
+comportamiento normal del tier gratuito, no un fallo del despliegue.
 
 ---
 

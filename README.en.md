@@ -5,6 +5,7 @@
 Transactional e-commerce API with row-level concurrency control, an inventory kardex, and
 atomicity guarantees on order creation.
 
+[![Live](https://img.shields.io/badge/live-ecommerce--backend--api--sh6c.onrender.com-brightgreen)](https://ecommerce-backend-api-sh6c.onrender.com/health)
 [![CI](https://github.com/jerryszc/ecommerce-backend-api/actions/workflows/ci.yml/badge.svg)](https://github.com/jerryszc/ecommerce-backend-api/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg)](https://fastapi.tiangolo.com/)
@@ -368,17 +369,59 @@ alembic current
 
 ## Deployment
 
-`render.yaml` is a ready-to-use **Render Blueprint**: a web service on the Docker runtime
-plus a PostgreSQL database, both on the free plan, with credentials injected automatically
-from the database and `healthCheckPath: /health`.
+**Public instance running:**
 
-```bash
-# In the Render dashboard: New -> Blueprint -> connect this repository
+```
+https://ecommerce-backend-api-sh6c.onrender.com/health   ->  {"status":"ok"}
+https://ecommerce-backend-api-sh6c.onrender.com/docs      ->  interactive OpenAPI
 ```
 
-**Note:** Render's free plan suspends the service after a period of inactivity and wakes it
-on the next request, so the first load can take several seconds. This configuration is
-ready to deploy, but there is no public instance currently kept running.
+The API is deployed on Render with its own PostgreSQL database. To try it without installing
+anything:
+
+```bash
+# Status
+curl https://ecommerce-backend-api-sh6c.onrender.com/health
+
+# Create an order and watch the stock drop (row locking in action)
+curl -X POST https://ecommerce-backend-api-sh6c.onrender.com/categories \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Audio"}'
+
+curl -X POST https://ecommerce-backend-api-sh6c.onrender.com/products \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Headphones","sku":"HP-100","price":"79.99","stock":4,"category_id":1}'
+
+curl -X POST https://ecommerce-backend-api-sh6c.onrender.com/customers \
+  -H "Content-Type: application/json" \
+  -d '{"full_name":"Demo Buyer","email":"demo@example.com"}'
+
+# 2 units: stock goes 4 -> 2 and a kardex entry is written
+curl -X POST https://ecommerce-backend-api-sh6c.onrender.com/orders \
+  -H "Content-Type: application/json" \
+  -d '{"customer_id":1,"lines":[{"product_id":1,"quantity":2}]}'
+
+# 999 units: 400 and the stock does NOT change. The guarantee, checked in production.
+curl -i -X POST https://ecommerce-backend-api-sh6c.onrender.com/orders \
+  -H "Content-Type: application/json" \
+  -d '{"customer_id":1,"lines":[{"product_id":1,"quantity":999}]}'
+```
+
+### How it was deployed
+
+`render.yaml` is a **Render Blueprint**: a web service on the Docker runtime plus a
+PostgreSQL database, both on the free plan, with credentials injected automatically and
+`healthCheckPath: /health`. The container's `start.sh` runs `alembic upgrade head` on every
+boot, so migrations ship with the deployment.
+
+One detail that only shows up on Linux: the `Dockerfile` normalises `start.sh` to LF during
+the build. With Windows line endings the shebang becomes `#!/bin/sh\r` and the kernel looks
+for an interpreter named `/bin/sh\r`, which does not exist. Windows hides this and CI does
+too, because the smoke test uses `docker compose` with a different entrypoint.
+
+**Note:** Render's free plan suspends the service after a few minutes of inactivity and wakes
+it on the next request, so the first load can take 30 seconds or more. That is normal for the
+free tier, not a deployment failure.
 
 ---
 
